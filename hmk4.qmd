@@ -1,0 +1,313 @@
+---
+title: "Hmk4"
+author: "Ziyi Tao"
+format: 
+  html:
+    code-fold: true
+    code-tools: true
+    embed-resources: true
+toc: true
+editor: visual
+---
+
+Github : <https://github.com/t-aozy/Hmk4_STAT506.git>
+
+## Problem 1 Tidyverse
+
+## a. Mean and median departure delay per airport.
+
+For the departure delay, we join "faa" variable in table airports with "origin" variable in table flights.
+
+```{r}
+library(nycflights13)
+
+library(dplyr)
+
+flights <- nycflights13::flights 
+flights %>% 
+  group_by(dest)%>%
+  mutate(count_dest = n())%>%
+  filter(count_dest >= 10)%>%
+  ungroup()%>%
+  rename(faa = origin)%>%
+  left_join(y = nycflights13::airports ,by = "faa")%>%
+  group_by(name)%>%
+  summarize(
+    mean_dep_delay = mean(dep_delay, na.rm = TRUE),
+    median_dep_delay = median(dep_delay, na.rm = TRUE)
+  )%>%
+  dplyr :: select(mean_dep_delay, median_dep_delay, name)%>%
+  arrange(desc(mean_dep_delay))
+```
+
+When calculating arrival delay, we join "faa" in table airports with "dest" in table flights.
+
+```{r}
+flights_1 <- nycflights13::flights 
+flights_1 %>% 
+  group_by(dest)%>%
+  mutate(count_dest = n())%>%
+  filter(count_dest >= 10)%>%
+  ungroup()%>%
+  rename(faa = dest)%>%
+  inner_join(y = nycflights13::airports ,by = "faa")%>%
+  group_by(name)%>%
+  summarize(
+    mean_arr_delay = mean(arr_delay, na.rm = TRUE),
+    median_arr_delay = median(arr_delay, na.rm = TRUE)
+  )%>%
+  dplyr :: select(mean_arr_delay, median_arr_delay, name)%>%
+  arrange(desc(mean_arr_delay))%>%
+  print(n=98)
+
+```
+
+## b. How many flights did the aircraft model with the fastest average speed take?
+
+Since the definition of average speed is not very clear, I provide 3 ways to get the result.
+
+First, we calculate each flight's average speed (without grouping by model) and find the flight with the fastest speed, then we record the model of that flight, then count the number of flights this model took. The model with the fastest average speed is 757-232, MPH is 703.3846, the model has taken 3980 flights. PS: we calculate MPH using distance / (air_time/60), which is included in the table flights.
+
+```{r}
+flight3 <- nycflights13::flights
+flight3 %>%
+  inner_join(nycflights13 :: planes, by = "tailnum")%>%
+  mutate(
+    MPH = distance /(air_time/60)
+  )%>% 
+  group_by(model)%>%
+  summarize(Number_of_Flights = n(), MPH = MPH)%>%
+  arrange(desc(MPH))%>%
+  head(1)
+```
+
+Second, we first group by model, and calculate the average speed of all the flights with each model, find the model with the fastest average speed, and then count the flights this model took. The model with the fastest average speed is 777-222, MPH = 482.6254, has taken 4 flights.
+
+```{r}
+flight3 <- nycflights13::flights
+flight3 %>%
+  inner_join(nycflights13 :: planes, by = "tailnum")%>%
+  mutate(
+    MPH = distance /(air_time/60)
+  )%>%
+  group_by(model)%>%
+  summarize(Number_of_Flights = n(), 
+            MPH = mean(MPH, na.rm = TRUE))%>%
+  arrange(desc(MPH))%>%
+  head(1)
+```
+
+Moreover, we can also directly use speed variable in table planes, where the fastest speed is 432, model is DC-9-51, which takes 91 flights.
+
+```{r}
+flight3 %>%
+  inner_join(nycflights13 :: planes, by = "tailnum")%>%
+  group_by(model)%>%
+  summarize(Number_of_Flights = n(), speed = speed)%>%
+  arrange(desc(speed))%>%
+  head(1)
+```
+
+## Problem 2 get_temp()
+
+## a. Form function
+
+```{r}
+library(stringr)
+get_temp <- function(month_, year_, data, 
+                     celsius = FALSE, average_fn = function(x){mean(x)}){
+  
+    months <- c("January", "Feburary","March", "April", "May",
+                          "June", "July", "August", "September", "October",
+                          "November", "December")
+    
+    # stop when input is not included in 12 months 
+    # case-insensitive when matching characters
+    if((month_  <= 12 & month_  >= 1 )== FALSE & 
+       any(grepl(tolower(month_ ), tolower(months))) == FALSE){
+      stop("Input month is invalid.")
+    }
+    
+    # stop when input year is not numeric
+    if(is.numeric(year_)!=TRUE){
+      stop("Input year should be numeric.")
+    }
+    
+    # stop when there is no data in the required month and year.
+    data %>% filter((month_numeric == month_ | 
+                        month == str_to_title(substr(paste(collapse = "", 
+                                            sub(paste(c("^(",
+                                                        tolower(month_),
+                                                        ").*|.*")                                                                                                         ,collapse = ""), 
+                                                "\\1", 
+                                                tolower(months))
+                                              ),1, 3
+                                        ))
+                        )
+                        & (year == year_))%>% 
+    nrow() %>% if(. == 0){stop("No data in the required year and month.")}
+
+      
+  
+    data %>% 
+    filter((month_numeric == month_ | 
+                        month == str_to_title(
+                          substr(paste(collapse = "", 
+                                  sub(paste(c("^(",tolower(month_),").*|.*")                                                      ,collapse = ""), 
+                                                "\\1", 
+                                                tolower(months))
+                                              ),1, 3
+                                        ))
+            )
+            & year == year_)%>%
+    mutate(temp_new = sapply(temp, function(x){
+      if(celsius == FALSE){x}else{(x-32)/1.8}}))%>%
+    summarize(average_fn = average_fn(temp_new))%>% as.vector()
+}
+
+```
+
+## b. Test function
+
+```{r}
+nnmaps <- read.table("D:/chicago-nmmaps.csv", sep = ",", header = TRUE)
+get_temp("Apr", 1999, data = nnmaps)
+```
+
+```{r}
+get_temp("Apr", 1999, data = nnmaps, celsius = TRUE)
+```
+
+```{r}
+get_temp(10, 1998, data = nnmaps, average_fn = median)
+```
+
+```{r, error=TRUE}
+get_temp(13, 1998, data = nnmaps)
+```
+
+```{r, error=TRUE}
+get_temp(2, 2005, data = nnmaps)
+```
+
+```{r}
+get_temp("November", 1999, data =nnmaps, celsius = TRUE,
+         average_fn = function(x) {
+           x %>% sort -> x
+           x[2:(length(x) - 1)] %>% mean %>% return
+         })
+```
+
+## Problem 3 Visualization
+
+```{r}
+data <- read.csv("D:/df_for_ml_improved_new_market.csv")
+
+```
+
+## a. Is there a change in the sales price in USD over time?
+
+According to the result, the average sales price first decreased from 1997-2001, then kept increasing from 2001-2008, after 2008, the average sale price was relatively stable. The variance of sales price, however, showed an increasing trend since 1997.
+
+```{r}
+library(ggplot2)
+library(scales)
+
+data$year <- as.factor(data$year)
+ggplot(data, aes(x = price_usd, y = year)) +
+  scale_x_continuous(trans = "log", 
+                     labels = dollar,
+                     breaks = trans_breaks("log2", function(x) 2^x)
+                     )+
+  geom_boxplot()+
+  coord_flip()+
+  theme_bw()+
+  xlab("PRICE IN USD")+
+  ylab("YEAR")+
+  theme(panel.border = element_blank(), axis.line = element_line()) 
+  
+
+```
+
+## b. Does the distribution of genre of sales across years appear to change?
+
+There are 5 genres in the data set, which are Photography, Print, Painting, Sculpture and Others. According to the result, painting accounted for a large amount of the sales from 1997-1999 and decreased rapidly after 2000, since 2000 the proportion of paintings kept fluctuating around 10%.
+
+In replacement of painting, sculptures and photos becacme 2 dominant genres in terms of sales after 2000, where sculptures had a proportion of around 35% and photos had 40%. Print began to appear in the market from 2000, though Print only accounted for a small amount of the whole sales, the ratio was quite stable, and showed a tendency to grow.
+
+```{r}
+library(ggsci)
+data %>% 
+  group_by(year)%>% 
+  summarize(
+      photo = sum(Genre___Photography),
+      print = sum(Genre___Print),
+      paintng = sum(Genre___Painting),
+      sculpture = sum(Genre___Sculpture),
+      other = sum(Genre___Others)
+    )%>%
+  tidyr:: pivot_longer(cols = !year)%>%
+  mutate(genre = name,
+         count = value
+         )%>%
+  select(year, genre, count) -> data_genre
+
+data_genre %>% group_by(year)%>% 
+  mutate(ratio = round(count/sum(count), digit = 2)) -> data_genre
+
+ggplot(data_genre, aes(x = year, y = count, fill = genre))+
+  geom_bar(stat = "identity", position = "fill")+
+  xlab("YEAR")+
+  ylab("PROPORTION")+
+  theme_classic()+
+  geom_text(aes(label = ratio), 
+            position = position_fill(0.8), size = 3, vjust = 0.5)+
+  scale_y_continuous(expand = c(0, 0))+
+  scale_fill_npg()
+  
+```
+
+## c. How does the genre affect the change in sales price over time?
+
+In the reult, the red line shows the overall average of sales price each year, the black lines shows the average sale price within each genre, the scatter plot shows the price of each artwork. We found that lots of observations were both belong to genre painting and others, which is unlikely, so we exclude others when discussing the affect of genres on the change in sales price over time. We found that photos' price were generally larger then that of sculptures. So we guess that the increase of overall average sales price may partly be driven by the increase of paintings' price and it's proportion in the whole market. At the same time, the price of sculptures were functioned to lower the average overall price as is shown in the scatter plot. We know that the price of sculptures were lower than the other 3 genres. The average price of Print and Paintings were greater than sculptures but smaller than Photos, which are closest to the mean overall price, also, due to the low market quota, these two genres did not show great effect to the average market price.
+
+```{r}
+data$genre <- 1*data$Genre___Sculpture + 2*data$Genre___Painting+
+              3*data$Genre___Print+ 4*data$Genre___Photography
+
+data <- data[data$genre!=0,]
+data$genre <- factor(data$genre, labels = c("Sculpture", "Painting", "Print", "Photography"))
+data %>% 
+  mutate( year = as.numeric(year))%>%
+  group_by(year)%>%
+  summarize(
+    Yearly_mean = mean(price_usd),
+    Mean_print = sum(price_usd*Genre___Print)/sum(Genre___Print),
+    Mean_Sculpture = sum(price_usd*Genre___Sculpture)/sum(Genre___Sculpture),
+    Mean_Painting = sum(price_usd*Genre___Painting)/sum(Genre___Painting),
+    Mean_Photo = sum(price_usd*Genre___Photography)/sum(Genre___Photography)
+  )%>% tidyr:: pivot_longer(cols = !year) -> yearly_data
+
+ggplot(data, aes(x = year, y = price_usd, color = genre))+
+  geom_jitter() +
+  geom_line(aes(y = value, x = year, linetype = name), 
+            data = yearly_data[yearly_data$name!= "Yearly_mean",], 
+            color = "black", 
+            linewidth = 1)+
+  geom_line(aes(y = value, x = year), 
+            data = yearly_data[yearly_data$name== "Yearly_mean",], 
+            color = "red", 
+            linewidth = 1)+
+  scale_y_continuous(trans = "log", 
+                     labels = dollar,
+                     breaks = trans_breaks("log2", function(x) 2^x)
+                     )+
+  scale_x_discrete(
+                     breaks = seq(1997, 2012, 2)
+                     )+
+  scale_color_brewer(palette = "Set2")+
+  ylab("PRICE IN USD")+
+  xlab("YEAR")
+
+ 
+```
